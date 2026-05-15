@@ -1,0 +1,56 @@
+# Mosquitto MQTT broker + coturn TURN server pra ROS2-RCS twin
+#
+# Deploy: VPS (qualquer Linux Docker host, recomendado Ubuntu 22.04+)
+#
+# Usage:
+#   1. Run ./init.sh once to generate certs and config
+#   2. docker compose up -d
+#   3. docker compose logs -f
+#
+# Phase 8 — deployment final. Pra Phase 1-7 não é necessário.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # MQTT plaintext (LOCAL only, blocked at firewall externally)
+      - "8883:8883"   # MQTT/TLS — exposed to Internet
+      - "9001:9001"   # WebSocket pra browsers (futuro RCS web)
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "127.0.0.1", "-p", "1883", "-u", "health", "-P", "health", "-t", "$$SYS/#", "-C", "1", "-W", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: coturn
+    restart: unless-stopped
+    # Host network — coturn needs many UDP ports + the relay range (49152-65535)
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
+      - ./certs:/certs:ro
+      - coturn-data:/var/lib/coturn
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "turnserver"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mosquitto-data:
+    driver: local
+  mosquitto-log:
+    driver: local
+  coturn-data:
+    driver: local

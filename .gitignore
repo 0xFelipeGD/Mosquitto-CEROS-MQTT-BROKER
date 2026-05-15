@@ -1,0 +1,21 @@
+# Runtime data
+data/
+certs/
+*.key
+*.pem
+*.crt
+!ca.crt.example
+
+# Logs
+*.log
+log/
+
+# Env
+.env
+.env.*
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
