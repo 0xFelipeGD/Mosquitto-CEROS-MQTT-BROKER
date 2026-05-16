@@ -1,28 +1,28 @@
-# Mosquitto MQTT broker + coturn TURN server pra ROS2-RCS twin
+# Mosquitto MQTT broker for CEROS / ROS2-RCS Twin — F2 deployment
 #
-# Deploy: VPS (qualquer Linux Docker host, recomendado Ubuntu 22.04+)
+# Deploy: any Linux Docker host (VPS recommended Ubuntu 22.04+; also runs
+# locally for smoke tests).
 #
 # Usage:
-#   1. Run ./init.sh once to generate certs and config
-#   2. docker compose up -d
-#   3. docker compose logs -f
+#   ./wizard.sh         (one-command, prompts for user/password)
+#   ./init.sh           (generate passwd file manually)
+#   ./deploy.sh up      (start manually after init.sh)
 #
-# Phase 8 — deployment final. Pra Phase 1-7 não é necessário.
+# coturn (WebRTC TURN) was here in F1 design; deferred to F4 (camera).
+# TLS listener 8883 deferred to F10 (hardening).
 
 services:
   mosquitto:
     image: eclipse-mosquitto:2.0
-    container_name: mosquitto
+    container_name: ceros-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"   # MQTT plaintext (LOCAL only, blocked at firewall externally)
-      - "8883:8883"   # MQTT/TLS — exposed to Internet
-      - "9001:9001"   # WebSocket pra browsers (futuro RCS web)
+      - "1883:1883"   # MQTT plaintext — Jetson bridge
+      - "9001:9001"   # MQTT WebSocket — Electron frontend
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/acl:/mosquitto/config/acl:ro
       - ./mosquitto/passwd:/mosquitto/config/passwd:ro
-      - ./certs:/mosquitto/certs:ro
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
     healthcheck:
@@ -31,26 +31,8 @@ services:
       timeout: 10s
       retries: 3
 
-  coturn:
-    image: coturn/coturn:latest
-    container_name: coturn
-    restart: unless-stopped
-    # Host network — coturn needs many UDP ports + the relay range (49152-65535)
-    network_mode: host
-    volumes:
-      - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
-      - ./certs:/certs:ro
-      - coturn-data:/var/lib/coturn
-    healthcheck:
-      test: ["CMD", "pgrep", "-x", "turnserver"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
 volumes:
   mosquitto-data:
     driver: local
   mosquitto-log:
-    driver: local
-  coturn-data:
     driver: local

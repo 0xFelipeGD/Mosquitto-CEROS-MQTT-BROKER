@@ -1,41 +1,18 @@
-# Mosquitto ACL — ROS2-RCS Twin
-# Three users: rcs_operator (PC/tablet), ugv_client (Jetson), health (internal)
+# Mosquitto ACL — CEROS / ROS2-RCS Twin (F2 data pipeline)
 #
-# All twin traffic happens under `ugv/` prefix (legacy from Remote_Control compatibility).
+# F2 keeps it simple: a single `ceros` user with full read/write on the
+# entire `ceros/#` tree, plus a `health` user used only by the
+# healthcheck for read access to $SYS.
+#
+# Granular per-role ACL (operator vs rover vs autopilot, separate certs)
+# is F10 hardening. See INTERFACE_CONTRACT.md §3.
+#
 # Reload after editing: docker compose restart mosquitto
 
-# Health check user — read-only on $SYS
+# Healthcheck (internal use only)
 user health
 topic read $SYS/#
 
-# RCS operator (Electron app on PC/tablet)
-user rcs_operator
-topic readwrite ugv/cmd_vel
-topic readwrite ugv/heartbeat
-topic read ugv/odom
-topic read ugv/fix
-topic read ugv/rtk_status
-topic read ugv/e_stop_status
-topic read ugv/plc_status
-topic read ugv/motor/#
-topic read ugv/battery/#
-topic read ugv/sensors/#
-topic read ugv/detections
-topic readwrite ugv/webrtc/+
-topic readwrite ugv/waypoints
-
-# UGV client (Jetson's mqtt_client bridge)
-user ugv_client
-topic readwrite ugv/cmd_vel
-topic readwrite ugv/heartbeat
-topic write ugv/odom
-topic write ugv/fix
-topic write ugv/rtk_status
-topic write ugv/e_stop_status
-topic write ugv/plc_status
-topic write ugv/motor/#
-topic write ugv/battery/#
-topic write ugv/sensors/#
-topic write ugv/detections
-topic readwrite ugv/webrtc/+
-topic read ugv/waypoints
+# Main CEROS user — used by both the Jetson bridge and the operator frontend
+user ceros
+topic readwrite ceros/#
