@@ -28,7 +28,22 @@ echo ""
 
 # 0. Sanity
 command -v docker >/dev/null 2>&1 || error "Docker is required. Install Docker first."
-docker compose version >/dev/null 2>&1 || error "Docker Compose v2 plugin is required."
+
+# Auto-install docker-compose-v2 if the plugin is missing. Ubuntu's stock
+# `docker.io` package does NOT ship the compose plugin; install it from
+# universe (works on Ubuntu 22.04 jammy and 24.04 noble).
+if ! docker compose version >/dev/null 2>&1; then
+    warn "Docker Compose v2 plugin not found. Installing 'docker-compose-v2' via apt..."
+    if [ "$(id -u)" -ne 0 ]; then
+        sudo apt-get update -qq
+        sudo apt-get install -y docker-compose-v2 || error "Failed to install docker-compose-v2. Run manually: sudo apt install docker-compose-v2"
+    else
+        apt-get update -qq
+        apt-get install -y docker-compose-v2 || error "Failed to install docker-compose-v2."
+    fi
+    docker compose version >/dev/null 2>&1 || error "docker-compose-v2 installed but 'docker compose' still not available. Investigate manually."
+    ok "docker-compose-v2 installed"
+fi
 
 # 1. Prompt for password (only if passwd doesn't already exist)
 if [ -f mosquitto/passwd ]; then
