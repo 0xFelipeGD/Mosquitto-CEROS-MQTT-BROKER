@@ -50,6 +50,15 @@ else
     warn "Password file already exists — skipping (delete mosquitto/passwd to regenerate)"
 fi
 
+# Fix perms on acl (same as passwd: mosquitto 2.0+ warns about world-readable
+# and future versions will refuse to load). Owner = mosquitto user inside the
+# container (uid 1883).
+docker run --rm -v "$(pwd)/mosquitto:/mosquitto-host" eclipse-mosquitto:2.0 \
+    sh -c "
+        chmod 0700 /mosquitto-host/acl
+        chown 1883:1883 /mosquitto-host/acl 2>/dev/null || true
+    " 2>/dev/null || true
+
 # Verify structure
 log "Verifying structure..."
 test -f mosquitto/mosquitto.conf || { echo "Missing mosquitto/mosquitto.conf"; exit 1; }
