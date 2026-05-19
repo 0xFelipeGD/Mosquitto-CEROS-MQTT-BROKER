@@ -26,23 +26,74 @@ error() { echo -e "${RED}[error]${NC} $*"; exit 1; }
 log "Mosquitto-CEROS wizard — F2 broker install"
 echo ""
 
-# 0. Sanity
-command -v docker >/dev/null 2>&1 || error "Docker is required. Install Docker first."
+# Sudo prefix when not root.
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+    command -v sudo >/dev/null 2>&1 || error "This script needs root (or sudo). Re-run as root."
+    SUDO="sudo"
+fi
 
-# Auto-install docker-compose-v2 if the plugin is missing. Ubuntu's stock
-# `docker.io` package does NOT ship the compose plugin; install it from
-# universe (works on Ubuntu 22.04 jammy and 24.04 noble).
+# 0. Full setup: bring the host from vanilla to "broker running".
+# Honors the wizard contract — never bail with "install X first" when we can install X.
+
+log "Refreshing apt index (apt-get update)..."
+$SUDO apt-get update -qq || warn "apt-get update failed (non-fatal if Docker is already installed)."
+
+# Ensure curl + ca-certificates are present (needed for the Docker install script + most VPS bootstrap).
+if ! command -v curl >/dev/null 2>&1; then
+    log "Installing curl + ca-certificates..."
+    $SUDO apt-get install -y curl ca-certificates || error "Failed to install curl."
+fi
+
+# Install Docker via the official script if missing. Works on Ubuntu/Debian/CentOS/etc.
+# The official script installs docker-ce + the compose v2 plugin in one go,
+# so the apt 'docker-compose-v2' fallback below is rarely needed afterwards.
+if ! command -v docker >/dev/null 2>&1; then
+    log "Docker not found. Installing via official script (https://get.docker.com)..."
+    log "  This pulls docker-ce + compose plugin. Takes 1-2 min on a fresh VPS."
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh \
+        || error "Failed to fetch the Docker install script. Check network / DNS."
+    $SUDO sh /tmp/get-docker.sh \
+        || error "Docker install script failed. See output above."
+    rm -f /tmp/get-docker.sh
+    $SUDO systemctl enable --now docker \
+        || warn "Could not enable/start docker via systemctl (non-systemd host?). Trying 'service docker start'..."
+    if ! $SUDO systemctl is-active --quiet docker 2>/dev/null; then
+        $SUDO service docker start >/dev/null 2>&1 || true
+    fi
+    ok "Docker installed: $(docker --version 2>/dev/null || echo 'not in PATH yet')"
+else
+    ok "Docker already present: $(docker --version)"
+fi
+
+# Confirm the daemon answers (catches "installed but not running" and missing perms).
+if ! $SUDO docker info >/dev/null 2>&1; then
+    warn "Docker daemon not responding. Trying to start it..."
+    $SUDO systemctl start docker >/dev/null 2>&1 || $SUDO service docker start >/dev/null 2>&1 || true
+    sleep 2
+    $SUDO docker info >/dev/null 2>&1 \
+        || error "Docker daemon still not responding. Run 'sudo systemctl status docker' to investigate."
+fi
+
+# Auto-install docker-compose-v2 if the plugin is missing. The official Docker
+# script normally bundles the compose plugin, but some hosts already had the
+# older 'docker.io' apt package — in that case the plugin is absent and we
+# install it from Ubuntu universe (works on jammy 22.04 + noble 24.04).
 if ! docker compose version >/dev/null 2>&1; then
     warn "Docker Compose v2 plugin not found. Installing 'docker-compose-v2' via apt..."
-    if [ "$(id -u)" -ne 0 ]; then
-        sudo apt-get update -qq
-        sudo apt-get install -y docker-compose-v2 || error "Failed to install docker-compose-v2. Run manually: sudo apt install docker-compose-v2"
-    else
-        apt-get update -qq
-        apt-get install -y docker-compose-v2 || error "Failed to install docker-compose-v2."
-    fi
-    docker compose version >/dev/null 2>&1 || error "docker-compose-v2 installed but 'docker compose' still not available. Investigate manually."
+    $SUDO apt-get install -y docker-compose-v2 \
+        || error "Failed to install docker-compose-v2. Run manually: sudo apt install docker-compose-v2"
+    docker compose version >/dev/null 2>&1 \
+        || error "docker-compose-v2 installed but 'docker compose' still not available. Investigate manually."
     ok "docker-compose-v2 installed"
+fi
+
+# Smoke test the daemon. Pulls a 13 kB image once; idempotent thereafter.
+log "Verifying Docker works (hello-world)..."
+if $SUDO docker run --rm hello-world >/dev/null 2>&1; then
+    ok "Docker is healthy."
+else
+    warn "hello-world smoke test failed — network or daemon issue. Trying to proceed anyway."
 fi
 
 # 1. Prompt for password (only if passwd doesn't already exist)
@@ -59,12 +110,12 @@ else
 fi
 
 # 2. Optional firewall opening (Ubuntu/Debian with ufw)
-if command -v ufw >/dev/null 2>&1 && ufw status >/dev/null 2>&1; then
+if command -v ufw >/dev/null 2>&1 && $SUDO ufw status >/dev/null 2>&1; then
     echo ""
     read -rp "Open ports 1883 + 9001 with ufw? [y/N] " yn
     if [[ "$yn" =~ ^[Yy]$ ]]; then
-        sudo ufw allow 1883/tcp
-        sudo ufw allow 9001/tcp
+        $SUDO ufw allow 1883/tcp
+        $SUDO ufw allow 9001/tcp
         ok "Firewall rules added"
     fi
 fi
