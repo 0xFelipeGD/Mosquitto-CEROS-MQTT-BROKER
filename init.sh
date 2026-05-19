@@ -37,6 +37,7 @@ if [ ! -f mosquitto/passwd ]; then
         sh -c "
             echo 'ceros:$CEROS_PWD' > /tmp/passwd
             echo 'health:$HEALTH_PWD' >> /tmp/passwd
+            chmod 0600 /tmp/passwd       # silence mosquitto_passwd's world-readable warning
             mosquitto_passwd -U /tmp/passwd
             cat /tmp/passwd > /mosquitto-host/passwd
             chmod 0700 /mosquitto-host/passwd
