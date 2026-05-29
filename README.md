@@ -1,6 +1,6 @@
 # Mosquitto-CEROS-MQTT-BROKER
 
-MQTT broker (Eclipse Mosquitto 2.0) para o twin ROS 2 do **CEROS** rover.
+MQTT broker (Eclipse Mosquitto 2.0) para o sistema **CEROS**.
 
 **Estado**: F2 data pipeline — broker simples username/password sem TLS. coturn (WebRTC TURN) volta em F4, TLS/cert hardening volta em F10.
 
